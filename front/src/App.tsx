@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useMemo } from 'react';
 import './App.css';
+import config from './config';
 
-const palette = ['#444', '#eee', '#f22', '#6f0', '#44f']
+const palette = ['#444', '#eee', '#f22', '#ee0', '#0e0', '#46f', '#f2f']
 const pixelScale = 5;
 
 export default function App() {
-  const canvas = useMemo(() => ({
+  const canvas = useRef({
     width: 100,
     height: 100,
     data: [...Array(100 * 100)].map((_, i) => i % 5),
@@ -28,34 +29,36 @@ export default function App() {
         }
       }
     }
-  }), []);
+  });
 
   const [selectedColor, setSelectedColor] = React.useState(1);
 
   const wsMessageHandler = useCallback((ev: MessageEvent<any>) => {
     const [y, x, color] = JSON.parse(ev.data);
-    canvas.data[y * canvas.width + x] = color;
-    canvas.draw();
-  },[canvas]);
+    canvas.current.data[y * canvas.current.width + x] = color;
+    canvas.current.draw();
+  }, [canvas]);
 
   const ws = useMemo(() => {
-    const ws = new WebSocket('ws://localhost:8080/ws');
+    const url = new URL('/ws', config.apiUrl.replace(/^http/, 'ws'));
+    const ws = new WebSocket(url);
     ws.onmessage = (e) => wsMessageHandler(e);
     return ws
-  }, []);
+  }, [wsMessageHandler]);
 
   const canvasEl = useRef<any>(null);
 
   useEffect(() => {
-    fetch('http://localhost:8080/canvas').then(async res => {
-      const data: {pixels: number[]} = await res.json();
-      canvas.data = data.pixels;
-      canvas.draw()
+    const url = new URL('/canvas', config.apiUrl);
+    fetch(url.toString()).then(async res => {
+      const data: { pixels: number[] } = await res.json();
+      canvas.current.data = data.pixels;
+      canvas.current.draw()
     });
   }, []);
 
   useEffect(() => {
-    const handleMousedown = (e: MouseEvent)=> {
+    const handleMousedown = (e: MouseEvent) => {
       // ピクセルを特定
       const bbox = canvasEl.current.getBoundingClientRect();
       const rx = e.clientX - bbox.left;
@@ -63,8 +66,9 @@ export default function App() {
       const x = (rx / pixelScale | 0);
       const y = (ry / pixelScale | 0);
 
-      if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
-        fetch(`http://localhost:8080/canvas/pixels/${y}/${x}?color=${selectedColor}`, {
+      if (x >= 0 && x < canvas.current.width && y >= 0 && y < canvas.current.height) {
+        const url = new URL(`/canvas/pixels/${y}/${x}?color=${selectedColor}`, config.apiUrl);
+        fetch(url.toString(), {
           method: 'POST',
         });
       }
@@ -74,26 +78,37 @@ export default function App() {
     return () => {
       window.removeEventListener('mousedown', handleMousedown);
     }
-  }, [selectedColor])
+  }, [canvas, selectedColor]);
 
   return (
     <div className="App">
       <canvas id="canvas" ref={canvasEl}
-      width={canvas.width * pixelScale} height={canvas.height * pixelScale}></canvas>
+        width={canvas.current.width * pixelScale} height={canvas.current.height * pixelScale}>
+      </canvas>
       <div>
         {
           palette.map((color, i) => (
             <div
-            style={{
-              display: 'inline-block',
-              background: color,
-              width: 30,
-              height: 30,
-              margin: 5,
-              border: selectedColor === i ? '2px solid #444' : '2px solid #fff',
-            }}
-            key={i}
-            onClick={() => setSelectedColor(i)}>
+              style={{
+                display: 'inline-block',
+                margin: 3,
+                padding: 2,
+                width: 34,
+                height: 34,
+                background: selectedColor === i ? '#333' : '#fff',
+                borderRadius: '50%'
+              }}
+              key={i}
+              onClick={() => setSelectedColor(i)}>
+              <div
+                style={{
+                  display: 'inline-block',
+                  background: color,
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%'
+                }}
+              ></div>
             </div>
           ))
         }

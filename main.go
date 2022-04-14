@@ -14,13 +14,6 @@ import (
 func main() {
 	r := gin.Default()
 
-	/*
-		GET /canvas キャンバスの状態(すべてのピクセル)を取得する
-		POST /canvas/pixels/:y/:x?color=1 キャンバスのピクセルを更新する
-
-		websocket
-	*/
-
 	width := 100
 	height := 100
 	canvas := make([]int, width*height)
