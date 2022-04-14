@@ -1,14 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"pixelboard/broker"
 	"pixelboard/middleware"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
@@ -18,6 +25,31 @@ func main() {
 	height := 100
 	canvas := make([]int, width*height)
 	broker := broker.New()
+
+	serverAPIOptions := options.ServerAPI(options.ServerAPIVersion1)
+	clientOptions := options.Client().
+		ApplyURI(os.Getenv("MONGODB_URI")).
+		SetServerAPIOptions(serverAPIOptions)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(ctx, clientOptions)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	collection := client.Database("pxlbrd").Collection("canvas")
+
+	// canvasをロード
+	if res := collection.FindOne(ctx, bson.D{}); res.Err() == nil {
+		var result struct {
+			Canvas []int
+		}
+		err = res.Decode(&result)
+		if err != nil {
+			log.Fatal(err)
+		}
+		canvas = result.Canvas
+	}
 
 	r.Use(middleware.Cors())
 
@@ -49,6 +81,14 @@ func main() {
 		}
 
 		canvas[y*width+x] = color
+
+		res, err := collection.UpdateOne(c, bson.D{}, bson.D{{"$set", bson.D{{"canvas", canvas}}}}, options.Update().SetUpsert(true))
+		if err != nil {
+			c.JSON(500, gin.H{
+				"error": err,
+			})
+		}
+		fmt.Printf("res: %v\n", res)
 
 		broker.Publish([]int{y, x, color})
 
