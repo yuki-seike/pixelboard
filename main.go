@@ -24,6 +24,7 @@ func main() {
 	width := 100
 	height := 100
 	canvas := make([]int, width*height)
+	isDirty := false
 	broker := broker.New()
 
 	serverAPIOptions := options.ServerAPI(options.ServerAPIVersion1)
@@ -81,14 +82,7 @@ func main() {
 		}
 
 		canvas[y*width+x] = color
-
-		res, err := collection.UpdateOne(c, bson.D{}, bson.D{{"$set", bson.D{{"canvas", canvas}}}}, options.Update().SetUpsert(true))
-		if err != nil {
-			c.JSON(500, gin.H{
-				"error": err,
-			})
-		}
-		fmt.Printf("res: %v\n", res)
+		isDirty = true
 
 		broker.Publish([]int{y, x, color})
 
@@ -100,6 +94,21 @@ func main() {
 	r.GET("/ws", func(c *gin.Context) {
 		wshandler(c.Writer, c.Request, broker)
 	})
+
+	go func() {
+		for {
+			if isDirty {
+				isDirty = false
+
+				ctx := context.Background()
+				_, err := collection.UpdateOne(ctx, bson.D{}, bson.D{{"$set", bson.D{{"canvas", canvas}}}}, options.Update().SetUpsert(true))
+				if err != nil {
+					log.Println(err)
+				}
+			}
+			time.Sleep(time.Second)
+		}
+	}()
 
 	r.Run() // listen and serve on⁄
 }
