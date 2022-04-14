@@ -39,6 +39,7 @@ export default function App() {
     canvas.current.draw();
   }, [canvas]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const ws = useMemo(() => {
     const url = new URL('/ws', config.apiUrl.replace(/^http/, 'ws'));
     const ws = new WebSocket(url);
